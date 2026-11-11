@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모의고사 로그 꾸미기</title>
+<style>
+  :root{
+    --bg:#f6f4ee; --panel:#fffdf8; --ink:#2c2418; --sub:#8b7355; --line:#ddd5c3; --accent:#2c2418; --accent-ink:#fbfaf4;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#1d1a16; --panel:#26221c; --ink:#efe8da; --sub:#b8a586; --line:#40382d; --accent:#efe8da; --accent-ink:#1d1a16;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;font-size:14px;line-height:1.6}
+  header{max-width:1280px;margin:0 auto;padding:24px 16px 8px}
+  header h1{margin:0;font-size:22px;letter-spacing:-.3px}
+  header p{margin:4px 0 0;color:var(--sub);font-size:13px}
+  .wrap{max-width:1280px;margin:0 auto;padding:12px 16px 40px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:16px}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+  .panel h2{margin:0 0 10px;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  textarea{width:100%;min-height:520px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:10px;background:transparent;color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.55}
+  .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  button{font:inherit;font-size:12.5px;border:1px solid var(--line);background:transparent;color:var(--ink);padding:6px 12px;border-radius:999px;cursor:pointer}
+  button:hover{border-color:var(--sub)}
+  button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .preview{background:#fff;border-radius:8px;padding:16px 8px;overflow-x:auto;color:#111}
+  .hint{color:var(--sub);font-size:12px;margin-top:8px}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);padding:8px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .warn{color:#c0392b;font-size:12px;margin-top:6px;white-space:pre-line}
+  .rules{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+  .rules summary{cursor:pointer;font-weight:600;font-size:13.5px;padding:4px 0}
+  .rules .desc{color:var(--sub);font-size:12px;margin:6px 0 10px}
+  .rule-group{font-size:11.5px;font-weight:700;color:var(--sub);letter-spacing:1px;margin:14px 0 4px}
+  .rule-item{margin:6px 0}
+  .rule-item label{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;margin-bottom:2px}
+  .rule-item label span{color:var(--sub);font-size:11.5px;font-family:ui-monospace,Menlo,Consolas,monospace;text-align:right}
+  .rule-item input{width:100%;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:transparent;color:var(--ink);font:inherit;font-size:12.5px}
+  .rule-item input.changed{border-color:var(--sub);border-width:2px}
+  .rules .row{margin-top:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📝 모의고사 로그 꾸미기 <small style="font-size:12px;font-weight:normal;opacity:.6">v10</small></h1>
+  <p>SillyTavern 모의고사 QR 결과를 붙여넣으면 시험지 테마로 바꿔줍니다. 1인·다인 수험생 모두 지원해요.</p>
+</header>
+
+<div class="wrap">
+  <section class="panel">
+    <h2>
+      <span>① 로그 붙여넣기</span>
+      <span class="row">
+        <button id="clear">지우기</button>
+      </span>
+    </h2>
+    <textarea id="input" placeholder="여기에 모의고사 결과 로그를 그대로 붙여넣으세요."></textarea>
+    <div id="warn" class="warn"></div>
+    <details class="rules" id="rulesBox">
+      <summary>⚙️ 인식 단어 추가하기</summary>
+      <div class="desc">
+        모델이 다른 라벨을 써서 인식이 안 되면, 해당 칸에 그 단어를 쉼표로 이어서 추가하세요.
+        고치는 즉시 미리보기에 반영되고, 이 브라우저에 저장됩니다.
+        띄어쓰기·대소문자는 무시하고, 줄 앞의 *, -, 이모지는 건너뛰고 비교합니다.
+      </div>
+      <div id="rulesForm"></div>
+      <div class="row">
+        <button id="rulesExport">설정 복사 (공유용)</button>
+        <button id="rulesImport">설정 붙여넣기</button>
+        <button id="rulesReset">기본값으로</button>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <h2>
+      <span class="row" id="themes">
+        <span>② 테마</span>
+        <button data-theme="sepia" class="on">📜 갈색</button>
+        <button data-theme="mono">🖤 흑백</button>
+        <button data-theme="kid">🌈 파스텔</button>
+        <button data-theme="ksat">📘 수능</button>
+        <button data-theme="chalk">🟩 칠판</button>
+        <button data-theme="night">🌙 밤</button>
+        <button data-theme="rose">🌸 벚꽃</button>
+      </span>
+      <span class="row">
+        <button id="copyRich" class="primary">서식 복사</button>
+        <button id="copyHtml">HTML 코드 복사</button>
+        <button id="download">.html 저장</button>
+      </span>
+    </h2>
+    <div class="preview" id="preview"></div>
+    <div class="hint">
+      <b>서식 복사</b>: 카페·블로그 에디터에 그대로 붙여넣기 할 때 ·
+      <b>HTML 코드 복사</b>: HTML 모드가 있는 곳에 붙여넣기 할 때.
+      스타일은 모두 인라인으로 들어가서 &lt;style&gt; 태그를 막는 사이트에서도 유지됩니다.
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   0. 인식 규칙  ← 모델이 쓰는 단어가 바뀌면 여기만 고치면 됩니다
+   ---------------------------------------------------------
+   - 목록에 단어를 추가하면 그 단어도 인식합니다.
+   - 대소문자, 띄어쓰기 차이는 무시합니다. ('total score' = 'TotalScore')
+   - 이모지도 단어처럼 넣을 수 있습니다.
+   자세한 설명은 RULES.md 참고.
+   ========================================================= */
+const RULES = {
+  // 제목 줄(### 또는 아래 이모지로 시작하는 줄)이 어느 구역인지 정하는 단어.
+  // 위에서부터 순서대로 확인합니다.
+  sections: [
+    ['mc',     ['객관식', 'multiple choice']],
+    ['es',     ['서술형', '주관식', 'essay']],
+    ['head',   ['📜', 'hosted by', '주관', '주최', 'mock exam', '모의고사']],
+    ['word',   ['한마디', 'a word from']],
+    ['result', ['💯', '결과', 'result']],
+    ['pre',    ['시험 전', '앞두고', 'before', '시작']],
+    ['post',   ['시험 후', '후', '끝', 'after', '종료']],
+    ['scene',  ['🎬']],   // 전/후 단어가 없으면 시험지 앞이면 '시험 전', 뒤면 '시험 후'
+  ],
+  // # 없이도 제목 줄로 취급할 시작 이모지
+  headingEmojis: ['🎬', '📜', '💯', '📝'],
+
+  // 머리말: 출제자 / 응시자 줄
+  examiner:   ['출제자', '출제', '시험관', '감독관', '감독', '주최자', '주최', '주관자', '주관', '채점자', 'examiner', 'proctor', 'hosted by', 'host'],
+  examinee:   ['응시자', '응시', '수험생', '학생', 'examinees', 'examinee', 'students', 'student'],
+  // 제목 '[○○ 주최 : 주제]' 처럼 이름 뒤에 붙는 단어
+  hostSuffix: ['주최', '주관', '출제', '감독'],
+
+  // 문제 번호 앞에 붙는 말 (Q1. / 문제 1. / 문항 1)
+  question: ['Q', '문제', '문항'],
+
+  // 문항 안의 세 줄
+  submit:  ['👉', '제출 답안', '제출', 'submitted answers', 'submitted'],
+  grade:   ['✔', '✅', '✒', '채점 및 코멘트', '채점', 'graded & comment', 'graded'],
+  comment: ['🗣', '출제자 코멘트', '코멘트', '평가', '총평', 'comments', 'comment'],
+  answer:  ['정답', 'correct answer', 'answer'],
+  correct: ['⭕', '○', '◯'],
+  wrong:   ['✘', '❌', '✗', '✕'],
+
+  // 결과
+  total:   ['🏆', '총점', 'total score'],
+  word:    ['💬', '한마디', 'a word from'],
+};
+
+/* 규칙 → 정규식 도우미 (건드릴 필요 없음) */
+const reEsc = w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
+const alt = list => [...list].sort((a, b) => b.length - a.length).map(reEsc).join('|');
+const has = (list, str) => new RegExp('(?:' + alt(list) + ')', 'i').test(str);
+const starts = (list, str) => new RegExp('^(?:' + alt(list) + ')', 'i').test(str);
+/* =========================================================
+   1. 파서 — 마크다운 로그 → 데이터
+   ========================================================= */
+const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩';
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function md(s){
+  let t = esc(String(s).trim());
+  t = t.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+  t = t.replace(/(^|[^*\w])\*(?!\s)([^*]+?)\*(?!\*)/g,'$1<i>$2</i>');
+  t = t.replace(/`([^`]+)`/g,'$1');
+  return t;
+}
+function plain(s){return String(s).replace(/\*\*/g,'').replace(/`/g,'').replace(/^\*+|\*+$/g,'').trim();}
+
+function headingOf(t){
+  const m = t.match(/^#{1,6}\s+(.*)$/);
+  if (m) return plain(m[1]);
+  if (t.length < 90 && starts(RULES.headingEmojis, t.replace(/^\**\s*/, ''))) return plain(t);
+  return null;
+}
+function sectionOf(h){
+  for (const [name, words] of RULES.sections) if (has(words, h)) return name;
+  return null;
+}
+function cleanTitle(h){
+  let t = plain(h).replace(/^📜\s*/,'').replace(/^\[|\]$/g,'').trim();
+  cleanTitle.host = '';
+  const HOST = new RegExp('^(?:' + alt(RULES.examiner) + ')\\s*[:：]?\\s*(.+?)$', 'i');
+  const HOST_AFTER = new RegExp('^(.+?)\\s*(?:' + alt(RULES.hostSuffix) + ')$');
+  if (/[|｜]/.test(t)){
+    const parts = t.split(/[|｜]/).map(x => x.trim()).filter(Boolean);
+    const m = parts[0].match(HOST) || parts[0].match(HOST_AFTER);
+    if (m || parts.length > 1){ if (m) cleanTitle.host = m[1].trim(); t = parts.slice(1).join(' | ') || parts[0]; }
+  } else {
+    const m = t.match(new RegExp('^(?:' + alt(RULES.examiner) + ')\\s*[:：]?\\s*([^:：]+?)\\s*[:：]\\s*(.+)$', 'i'))
+           || t.match(new RegExp('^([^:：]+?)\\s*(?:' + alt(RULES.hostSuffix) + ')\\s*[:：]\\s*(.+)$'));
+    if (m){ cleanTitle.host = m[1].trim(); t = m[2]; }
+  }
+  t = t.replace(/mock\s*exam/i,'모의고사');
+  return t;
+}
+function parseEntry(b){
+  const s = b.replace(/^(?:🔸|🔹|🔶|🔷|■|•|▪️|▪)\s*/,'');
+  const had = s !== b;
+  let m = s.match(/^\**\s*\[([^\]]{1,30})\]\s*\**\s*[:：]?\s*(.*)$/);
+  if (m) return {name:m[1].trim(), text:m[2].trim()};
+  if (had){
+    m = s.match(/^\*\*([^*]{1,30}?)\*\*\s*[:：]\s*(.*)$/) || s.match(/^([^:：*]{1,20})\s*[:：]\s*(.*)$/);
+    if (m) return {name:m[1].trim(), text:m[2].trim()};
+  }
+  return null;
+}
+const lead = b => b.replace(/^[^\p{L}\p{N}]+/u,'');
+function stripLabel(b, list){
+  let s = lead(b);
+  s = s.replace(new RegExp('^(?:' + alt(list) + ')\\s*\\**\\s*[:：]?\\s*\\**\\s*[:：]?\\s*','i'),'');
+  return s.trim();
+}
+function addChoices(q, s){
+  s = s.replace(/[①-⑩]\s*~\s*[①-⑩]\s*(\([^)]*\))?/g, '').trim();
+  if (!s) return;
+  for (const p of s.split(/(?=[①②③④⑤⑥⑦⑧⑨⑩])/)){
+    const t = p.trim();
+    if (!t) continue;
+    if (/^[①-⑩]/.test(t)) q.choices.push(t); else q.text.push(t);
+  }
+}
+
+function stripWord(line){
+  // '💬 A Word from ○○', '**💬 ○○의 한마디**: …' 등에서 라벨을 떼고 남은 말만
+  const b = plain(line);
+  const m = b.match(new RegExp('^(.*?)(' + alt(RULES.word.filter(w => !/^\p{Extended_Pictographic}/u.test(w))) + ')', 'i'));
+  if (!m) return b.replace(/^💬\s*/, '').trim();
+  let r = b.slice(m.index + m[0].length);
+  if (/from$/i.test(m[2])) r = r.replace(/^\s*\S+/, '');
+  return r.replace(/^[\s:：*]+/, '').trim();
+}
+
+function parseLog(raw){
+  const d = {status:[],pre:[],post:[],title:'',examiner:'',examinees:'',mcInfo:'',esInfo:'',mc:[],es:[],scores:[],word:[]};
+  let sec = null, q = null, wordMode = false, s2;
+
+  for (const line of raw.replace(/\r/g,'').split('\n')){
+    const t = line.trim();
+    if (!t) continue;
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) continue;
+    if (/^<\/?[\w-]+>$/.test(t)) continue;
+    if (/^\*?\(\s*(repeat|generate)\b/i.test(t)) continue;
+
+    const h = headingOf(t);
+    if (h !== null){
+      const s = sectionOf(h);
+      if (s){
+        if (s === 'word'){ sec = 'result'; wordMode = true; const r = stripWord(h); if (r) d.word.push(r); continue; }
+        if (s === 'scene') { s2 = (d.mc.length || d.es.length || d.scores.length) ? 'post' : 'pre'; sec = s2; q = null; wordMode = false; continue; }
+        sec = s; q = null; wordMode = false;
+        if (s === 'head'){ d.title = cleanTitle(h); if (cleanTitle.host) d.titleHost = cleanTitle.host; }
+        if (s === 'mc') d.mcInfo = h;
+        if (s === 'es') d.esInfo = h;
+        continue;
+      }
+    }
+
+    const b = t.replace(/^[*\-+]\s+/,'').trim();
+
+    if (sec === null){ d.status.push(t); continue; }
+    if (sec === 'pre'){ d.pre.push(t); continue; }
+    if (sec === 'post'){ d.post.push(t); continue; }
+
+    if (sec === 'head'){
+      if (starts(RULES.examiner, lead(b))) d.examiner = plain(b.replace(/^.*?[:：]/,''));
+      else if (starts(RULES.examinee, lead(b))) d.examinees = plain(b.replace(/^.*?[:：]/,''));
+      else if (!d.title) d.title = cleanTitle(b);
+      continue;
+    }
+
+    if (sec === 'mc' || sec === 'es'){
+      const list = sec === 'mc' ? d.mc : d.es;
+      const qm = t.match(new RegExp('^\\**\\s*(?:' + alt(RULES.question) + ')\\s*(\\d+)\\s*[.):번]?\\s*\\**\\s*[.:]?\\s*(.*)$', 'i')) || t.match(/^\*\*\s*(\d+)\s*[.)]\s*\*\*\s*(.*)$/);
+      if (qm){
+        q = {num:qm[1], text:[], choices:[], submit:[], grade:[], comment:[], answer:'', mode:'q'};
+        list.push(q);
+        if (qm[2]) addChoices(q, qm[2]);
+        continue;
+      }
+      if (!q) continue;
+
+      const lb = lead(b);
+      const isL = list => starts(list, b) || starts(list, lb);
+      if (isL(RULES.submit)){
+        q.mode = 'submit';
+        const r = stripLabel(b, RULES.submit);
+        if (r) q.submit.push({name:null, text:r});
+        continue;
+      }
+      if (isL(RULES.grade)){
+        q.mode = 'grade';
+        let r = stripLabel(b, RULES.grade);
+        r = r.replace(/\*\*/g,'');
+        const am = r.match(new RegExp('\\[?\\s*(?:' + alt(RULES.answer) + ')[^①-⑩\\d\\]]{0,12}([①-⑩]|\\d+)\\s*번?\\s*\\)?\\s*\\]?', 'i'));
+        if (am){ q.answer = am[1].trim(); r = r.replace(am[0],'').trim(); }
+        r = r.replace(/^\(\s*/,'').replace(/\s*\)$/,'').replace(/^[-—–:：]\s*/,'').trim();
+        if (r) q.grade.push({name:null, text:r});
+        continue;
+      }
+      if (isL(RULES.comment) || (/^💬/.test(b))){
+        q.mode = 'comment';
+        const r = stripLabel(b, RULES.comment);
+        if (r) q.comment.push(r);
+        continue;
+      }
+
+      const e = parseEntry(b);
+      if (q.mode === 'q'){ addChoices(q, b); continue; }
+      if (q.mode === 'comment'){ q.comment.push(e ? `**${e.name}**: ${e.text}` : b); continue; }
+      const arr = q.mode === 'submit' ? q.submit : q.grade;
+      if (e) arr.push(e);
+      else if (arr.length) arr[arr.length-1].text += '\n' + b;
+      else arr.push({name:null, text:b});
+      continue;
+    }
+
+    if (sec === 'result'){
+      if (has(RULES.word, b.slice(0, 40))){
+        wordMode = true;
+        const r = stripWord(b);
+        if (r) d.word.push(r);
+        continue;
+      }
+      if (!wordMode && has(RULES.total, b)){
+        const s = b.replace(/^🏆\s*/,'').replace(/^(?:🔸|🔹)\s*/,'').trim();
+        const nm = s.match(/^\**\s*\[([^\]]+)\]\s*\**/);
+        let v = s.replace(/^\**\s*\[[^\]]+\]\s*\**/,'').replace(new RegExp('\\**\\s*(?:' + alt(RULES.total) + ')\\s*\\**\\s*[:：]?\\s*\\**', 'gi'),'');
+        v = v.replace(/[`*]/g,'').replace(/^[\s:：]+/,'').trim();
+        const pm = v.match(/(-?\d+(?:\.\d+)?)\s*점?\s*\/\s*100/);
+        d.scores.push({name: nm ? nm[1].trim() : null, pts: pm ? pm[1] : v});
+        continue;
+      }
+      d.word.push(t);
+      continue;
+    }
+  }
+  if (!d.examiner && d.titleHost) d.examiner = d.titleHost;
+  for (const q of d.mc){
+    if (q.answer) continue;
+    const c = plain(q.comment.join(' ')).match(new RegExp('(?:' + alt(RULES.answer) + ')[^①-⑩\\d]{0,12}([①-⑩]|\\d+)', 'i'));
+    if (c){ q.answer = c[1]; continue; }
+    const right = q.grade.findIndex(g => has(RULES.correct, g.text));
+    if (right >= 0){
+      const sub = q.grade[right].name ? q.submit.find(e => e.name === q.grade[right].name) : q.submit[0];
+      const m = sub && plain(sub.text).match(/[①-⑩]|\d+/);
+      if (m) q.answer = m[0];
+    }
+  }
+  return d;
+}
+
+/* =========================================================
+   2. 테마 — 모두 인라인 스타일
+   ========================================================= */
+const ANIMALS = ['🐥','🐰','🐻','🦊','🐱','🐼','🐨','🐸'];
+const SERIF = "'Noto Serif KR','Nanum Myeongjo','Batang',serif";
+const PEN = "'Nanum Pen Script','Gungsuh',cursive";
+
+function classicTheme(c){
+  return {
+    root:`max-width:680px;margin:0 auto;background:${c.paper};color:${c.ink};border:3px solid ${c.ink};font-family:${c.font||SERIF};font-size:14px;line-height:1.8;text-align:left;word-break:keep-all;overflow-wrap:anywhere`,
+    scene:`padding:14px 20px;background:${c.shade};border-bottom:2px solid ${c.ink};font-size:13.5px;color:${c.soft}`,
+    sceneTitle:`display:block;font-weight:bold;color:${c.ink};margin-bottom:4px;letter-spacing:2px`,
+    head:`text-align:center;padding:22px 16px 16px;border-bottom:3px double ${c.ink}`,
+    h2:`font-size:20px;font-weight:bold;letter-spacing:2px;margin:0 0 6px;border-bottom:1px solid ${c.ink};display:inline-block;padding-bottom:4px`,
+    meta:`font-size:13px;line-height:1.6;margin-top:10px`,
+    metaTag:`font-weight:bold`,
+    section:`padding:16px 20px;border-bottom:2px solid ${c.ink}`,
+    stag:`font-size:13px;font-weight:bold;letter-spacing:2px;border-bottom:1px solid ${c.ink};padding-bottom:4px;margin-bottom:6px`,
+    q:`margin:18px 0 6px;padding:6px 10px;border:1px solid ${c.ink};font-weight:bold;background:${c.light}`,
+    opts:`list-style:none;padding:0 0 0 14px;margin:4px 0 10px;font-size:13.5px`,
+    li:()=>`padding:1px 0`,
+    liAns:`font-weight:bold;color:${c.red||'#c0392b'};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:${c.red||'#c0392b'}`,
+    liPick:`text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:${c.ink}`,
+    liRight:`font-weight:bold;color:${c.blue||'#1d4ed8'};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:${c.blue||'#1d4ed8'}`,
+    tagRight:`color:${c.blue||'#1d4ed8'}`, tagWrong:`color:${c.ink}`,
+    row:`margin:6px 0;padding:6px 12px;font-size:13.5px`,
+    submit:`border-left:3px solid ${c.mid};background:${c.light}`,
+    grade:`border-left:3px solid ${c.ink};background:${c.shade}`,
+    comment:`border:1px dashed ${c.mid};background:${c.light}`,
+    label:`font-weight:bold;font-size:12px;letter-spacing:2px;margin-bottom:2px;color:${c.soft}`,
+    muted:`color:${c.mid};font-size:12.5px`,
+    essay:`font-size:14px;line-height:28px;background:${c.white} repeating-linear-gradient(transparent,transparent 27px,${c.rule} 28px);padding:4px 10px;border:1px solid ${c.mid};margin:4px 0 8px`,
+    o:`font-weight:bold`, x:`font-weight:bold`,
+    result:`text-align:center;padding:20px 16px;border-bottom:2px solid ${c.ink}`,
+    h3:`margin:0 0 10px;font-size:16px;font-weight:bold;letter-spacing:2px`,
+    scoreBox:`display:inline-block;margin:6px 8px;padding:10px 18px;border:2px solid ${c.ink};background:${c.white};min-width:110px;text-align:center`,
+    scoreName:`display:block;font-size:12px;color:${c.mid};letter-spacing:1px`,
+    scorePts:`display:block;font-size:30px;font-weight:bold;line-height:1.3;color:${c.ink}`,
+    scoreSmall:`font-size:14px;color:${c.mid};font-weight:normal`,
+    word:`margin:16px auto 0;max-width:420px;text-align:left;padding:10px 14px;border:1px solid ${c.ink};background:${c.shade};font-size:13.5px`,
+    wordLabel:`display:block;font-size:11px;letter-spacing:3px;margin-bottom:4px;color:${c.mid}`,
+    foot:`text-align:center;font-size:11px;color:${c.mid};padding:10px;border-top:3px double ${c.ink};letter-spacing:2px`,
+    L:{pre:'시험 전',post:'시험 후',titlePrefix:'',mc:'객관식',es:'서술형',submit:'▸ 제출',grade:'▸ 채점',comment:'▸ 코멘트',result:'시험 결과',examiner:'출 제',examinee:'응 시'},
+    bullet:()=> '■'
+  };
+}
+
+const THEMES = {
+  sepia: classicTheme({paper:'#fbfaf4',ink:'#2c2418',soft:'#4a3c2a',mid:'#8b7355',shade:'#f0ead8',light:'#f7f3e8',white:'#fffef8',rule:'#ddd5c3'}),
+  mono:  classicTheme({paper:'#ffffff',ink:'#111111',soft:'#333333',mid:'#666666',shade:'#f2f2f2',light:'#fafafa',white:'#ffffff',rule:'#dddddd'}),
+  ksat:  classicTheme({paper:'#ffffff',ink:'#1b2a4a',soft:'#33415c',mid:'#6b7a99',shade:'#eaf0f8',light:'#f6f8fc',white:'#ffffff',rule:'#d5dceb'}),
+  chalk: classicTheme({paper:'#2f4a3a',ink:'#f3f0e4',soft:'#dfe6d4',mid:'#a8bea4',shade:'#294234',light:'#35523f',white:'#2b4636',rule:'#4a6b54',red:'#ffa0a0',blue:'#9fd0ff',font:"'Pretendard','Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif"}),
+  night: classicTheme({paper:'#1f1c2c',ink:'#ece7f7',soft:'#cfc8e4',mid:'#9a92b8',shade:'#28243a',light:'#2d2942',white:'#252136',rule:'#3d3756',red:'#ff8fa6',blue:'#8fbaff',font:"'Pretendard','Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif"}),
+  rose:  classicTheme({paper:'#fffafa',ink:'#5b2c3a',soft:'#6e3c4a',mid:'#b07a88',shade:'#fbe9ee',light:'#fff3f6',white:'#ffffff',rule:'#f2d4dc',red:'#d6336c',blue:'#3b6fd8'}),
+  kid: {
+    root:`max-width:680px;margin:0 auto;background:#fffef6;color:#3d3225;border:3px dashed #f4a261;border-radius:20px;font-family:'Nanum Gothic','Gothic A1','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:14px;line-height:1.8;padding:4px;text-align:left;word-break:keep-all;overflow-wrap:anywhere`,
+    scene:`padding:14px 20px;margin:8px;background:#fff4e0;border-radius:14px;font-size:13.5px;color:#6b5230;border:2px dotted #f4a261`,
+    sceneTitle:`display:block;font-weight:bold;color:#e76f51;margin-bottom:4px`,
+    head:`text-align:center;padding:20px 16px 14px;margin:8px;background:#fff0f3;border-radius:16px;border:2px solid #ffb3c1`,
+    h2:`font-size:20px;font-weight:bold;letter-spacing:1px;margin:0 0 8px;color:#e76f51`,
+    meta:`font-size:13px;line-height:1.6;margin-top:8px`,
+    metaTag:`font-weight:bold`,
+    section:`padding:16px 20px;margin:8px;background:#fff;border-radius:14px;border:2px solid #e9e3d4`,
+    stag:`display:inline-block;background:#a8d8ea;color:#fff;font-size:13px;font-weight:bold;padding:2px 14px;border-radius:12px;margin-bottom:6px;letter-spacing:1px`,
+    q:`margin:16px 0 6px;padding:8px 12px;background:#fef9ef;border-radius:10px;font-weight:bold;border-left:5px solid #f4a261`,
+    opts:`list-style:none;padding:0 0 0 10px;margin:4px 0 10px;font-size:13.5px`,
+    li:()=>`padding:2px 8px;margin:2px 0`,
+    liAns:`font-weight:bold;color:#e76f51;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:#e76f51`,
+    liPick:`text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:#3d3225`,
+    liRight:`font-weight:bold;color:#3a86c8;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:#3a86c8`,
+    tagRight:`color:#3a86c8`, tagWrong:`color:#3d3225`,
+    row:`margin:6px 0;padding:8px 14px;border-radius:10px;font-size:13.5px`,
+    submit:`background:#eef7ff;border:2px dashed #a8d8ea`,
+    grade:`background:#fff4e0;border:2px dashed #f4a261`,
+    comment:`background:#f0faf4;border:2px dashed #95d5b2`,
+    label:`font-weight:bold;font-size:12px;margin-bottom:2px;color:#5b7a8a`,
+    muted:`color:#999;font-size:12.5px`,
+    essay:`font-size:14px;background:#fffef6;padding:6px 10px;border:2px dashed #ddd5c3;border-radius:8px;margin:4px 0 8px`,
+    o:`color:#2bb3a8;font-weight:bold`, x:`color:#e76f51;font-weight:bold`,
+    result:`text-align:center;padding:20px 16px;margin:8px;background:#fff0f3;border-radius:16px;border:2px solid #ffb3c1`,
+    h3:`margin:0 0 10px;font-size:16px;font-weight:bold;color:#e76f51`,
+    scoreBox:`display:inline-block;margin:6px 8px;padding:12px 18px;border:3px solid #f4a261;background:#fffef6;border-radius:14px;min-width:110px;text-align:center`,
+    scoreName:`display:block;font-size:12px;color:#999`,
+    scorePts:`display:block;font-size:30px;font-weight:bold;line-height:1.3;color:#e76f51`,
+    scoreSmall:`font-size:14px;color:#bbb;font-weight:normal`,
+    word:`margin:16px auto 0;max-width:420px;text-align:left;padding:12px 16px;border-radius:12px;background:#eef7ff;border:2px solid #a8d8ea;font-size:13.5px`,
+    wordLabel:`display:block;font-size:11px;color:#5ba4cf;letter-spacing:2px;margin-bottom:4px`,
+    foot:`text-align:center;font-size:11px;color:#c9bfae;padding:12px;letter-spacing:2px`,
+    L:{pre:'⭐ 시험 전',post:'⭐ 시험 후',titlePrefix:'🌈 ',mc:'✏️ 객관식',es:'📝 서술형',submit:'🖊️ 제출',grade:'📋 채점',comment:'💬 코멘트',result:'🏆 시험 결과',examiner:'출제',examinee:'응시'},
+    bullet:(i)=> ANIMALS[i % ANIMALS.length]
+  }
+};
+
+/* =========================================================
+   3. 렌더러 — 데이터 → 인라인 스타일 HTML
+   ========================================================= */
+function render(d, themeKey){
+  const S = THEMES[themeKey] || THEMES.sepia;
+  const st = (...ks) => ` style="${ks.map(k => S[k]).join(';')}"`;
+  const names = d.examinees.split(/[,、，/]| 및 | and /).map(s => plain(s)).filter(Boolean);
+  const idxOf = (name, fallback) => { const i = names.indexOf(name); return i >= 0 ? i : fallback; };
+  const prettyNum = v => {
+    const s = plain(v).replace(/번$/,'').trim();
+    if (/^\d+$/.test(s) && +s >= 1 && +s <= 10) return CIRCLED[+s-1] + '번';
+    if (/^[①-⑩]$/.test(s)) return s + '번';
+    return esc(plain(v));
+  };
+  const answerIndex = a => {
+    const s = plain(a);
+    const cm = s.match(/[①-⑩]/);
+    if (cm) return CIRCLED.indexOf(cm[0]);
+    const dm = s.match(/\d+/);
+    return dm ? +dm[0] - 1 : -1;
+  };
+  const choiceIndex = (c, i) => {
+    const m = c.slice(0, 4).match(/[①-⑩]/);
+    return m ? CIRCLED.indexOf(m[0]) : i;
+  };
+  const mark = v => {
+    let h = md(v);
+    h = h.replace(new RegExp('(' + alt(RULES.correct) + ')', 'g'), `<span${st('o')}>$1</span>`).replace(new RegExp('(' + alt(RULES.wrong) + ')', 'g'), `<span${st('x')}>$1</span>`);
+    return h;
+  };
+  const sceneBody = lines => lines.join('\n')
+    .replace(/\*\*/g, '')
+    .replace(/\s*("[^"\n]+"|“[^”\n]+”|「[^」\n]+」|『[^』\n]+』)\s*/g, '\n**$1**\n')
+    .split('\n').map(x => x.trim()).filter(Boolean)
+    .map(x => `<div style="margin:0 0 8px">${md(x)}</div>`).join('');
+  const scene = (title, lines) => lines.length ? `<div${st('scene')}><span${st('sceneTitle')}>${title}</span>${sceneBody(lines)}</div>` : '';
+  const who = (e, i) => e.name ? `${S.bullet(idxOf(e.name, i))} <b>${esc(e.name)}</b> : ` : '';
+  const splitDash = s => { const m = s.match(/^(.+?)\s+[-—–]\s+([\s\S]*)$/); return m ? [m[1], m[2]] : [s, '']; };
+  const muted = s => s ? `<span${st('muted')}>${md(s.replace(/^\*+|\*+$/g,'').replace(/^\(|\)$/g,''))}</span>` : '';
+  const sectionInfo = (info, kind, count) => {
+    const n = (info.match(/(\d+)\s*(?:questions?|문항|문제)/i) || [])[1] || count;
+    const p = (info.match(/(\d+)\s*(?:pts|점|points)/i) || [])[1] || (kind === 'mc' ? 60 : 40);
+    return `${S.L[kind]} · ${n}문항 · 총 ${p}점`;
+  };
+
+  let h = `<div${st('root')}>`;
+  if (d.status.length) h += `<div style="text-align:center;font-size:11.5px;opacity:.7;padding:8px 12px 6px;letter-spacing:.5px">${d.status.map(md).join('<br>')}</div>`;
+  h += scene(S.L.pre, d.pre);
+
+  h += `<div${st('head')}><div><span${st('h2')}>${S.L.titlePrefix}${md(d.title || '모의고사')}</span></div>`;
+  if (d.examiner || d.examinees){
+    const parts = [];
+    if (d.examiner) parts.push(`<span${st('metaTag')}>출제자</span> : ${md(d.examiner)}`);
+    if (d.examinees) parts.push(`<span${st('metaTag')}>응시자</span> : ${md(d.examinees)}`);
+    h += `<div${st('meta')}>${parts.join('&nbsp;&nbsp;&nbsp;&nbsp;')}</div>`;
+  }
+  h += `</div>`;
+
+  // 객관식
+  if (d.mc.length){
+    h += `<div${st('section')}><div${st('stag')}>${sectionInfo(d.mcInfo,'mc',d.mc.length)}</div>`;
+    for (const q of d.mc){
+      const ai = answerIndex(q.answer);
+      const multi = q.submit.some(e => e.name);
+      const picks = q.submit.map(e => ({ name: e.name, idx: answerIndex(splitDash(e.text)[0]) })).filter(p => p.idx >= 0);
+      h += `<div style="margin-bottom:26px">`;
+      h += `<div${st('q')}>Q${q.num}. ${md(q.text.join(' '))}</div>`;
+      if (q.choices.length){
+        h += `<ul${st('opts')}>` + q.choices.map((c,i) => {
+          const ci = choiceIndex(c, i);
+          const isAns = ai >= 0 && ci === ai;
+          const who2 = picks.filter(p => p.idx === ci);
+          let style = '';
+          if (multi){
+            if (isAns) style = S.liAns;
+            else if (who2.length) style = S.liPick;
+          } else {
+            const picked = who2.length > 0;
+            if (picked && isAns) style = S.liRight;
+            else if (isAns) style = S.liAns;
+            else if (picked) style = S.liPick;
+          }
+          const tags = multi && who2.length
+            ? ` <span style="font-size:11.5px;font-weight:normal;text-decoration:none;display:inline-block">` + who2.map(p => `<span style="${p.idx === ai ? S.tagRight : S.tagWrong};font-weight:bold">← ${esc(p.name)}</span>`).join(' ') + `</span>`
+            : '';
+          return `<li style="${S.li(i)}${style ? ';' + style : ''}">${md(c)}${tags}</li>`;
+        }).join('') + `</ul>`;
+      }
+      if (q.submit.length){
+        const single = q.submit.length === 1 && !q.submit[0].name;
+        if (single){
+          const [a, th] = splitDash(q.submit[0].text);
+          h += `<div${st('row','submit')}><b>${S.L.submit}</b> : ${prettyNum(a)}${th ? ' — ' + muted(th) : ''}</div>`;
+        } else {
+          h += `<div${st('row','submit')}><div${st('label')}>${S.L.submit} 답안</div>` + q.submit.map((e,i) => {
+            const [a, th] = splitDash(e.text);
+            return `<div>${who(e,i)}${prettyNum(a)}${th ? ' — ' + muted(th) : ''}</div>`;
+          }).join('') + `</div>`;
+        }
+      }
+      if (q.grade.length || q.answer){
+        const ans = q.answer ? ` [ 정답 : ${prettyNum(q.answer)} ]` : '';
+        const single = q.grade.length <= 1 && !(q.grade[0] && q.grade[0].name);
+        if (single){
+          h += `<div${st('row','grade')}><b>${S.L.grade}</b> : ${q.grade[0] ? mark(q.grade[0].text) : ''}${ans}</div>`;
+        } else {
+          h += `<div${st('row','grade')}><div${st('label')}>${S.L.grade}${ans}</div>` + q.grade.map((e,i) => `<div>${who(e,i)}${mark(e.text)}</div>`).join('') + `</div>`;
+        }
+      }
+      if (q.comment.length){
+        h += q.comment.length === 1 && q.comment[0].length < 80
+          ? `<div${st('row','comment')}><b>${S.L.comment}</b> : ${md(q.comment[0])}</div>`
+          : `<div${st('row','comment')}><div${st('label')}>${S.L.comment}</div>${q.comment.map(md).join('<br>')}</div>`;
+      }
+      h += `</div>`;
+    }
+    h += `</div>`;
+  }
+
+  // 서술형
+  if (d.es.length){
+    h += `<div${st('section')}><div${st('stag')}>${sectionInfo(d.esInfo,'es',d.es.length)}</div>`;
+    for (const q of d.es){
+      h += `<div style="margin-bottom:26px">`;
+      h += `<div${st('q')}>Q${q.num}. ${md(q.text.join(' '))}</div>`;
+      if (q.submit.length){
+        h += `<div${st('row','submit')}><div${st('label')}>${S.L.submit} 답안</div>` + q.submit.map((e,i) =>
+          `${e.name ? `<div>${who(e,i)}</div>` : ''}<div${st('essay')}>${e.text.split('\n').map(md).join('<br>')}</div>`
+        ).join('') + `</div>`;
+      }
+      if (q.grade.length){
+        const single = q.grade.length === 1 && !q.grade[0].name;
+        const fmt = s => md(plain(s).replace(/\s*pts?\b/i,'점').replace(/\s*points?\b/i,'점'));
+        if (single){
+          h += `<div${st('row','grade')}><b>${S.L.grade}</b> : ${fmt(q.grade[0].text)}</div>`;
+        } else {
+          h += `<div${st('row','grade')}><div${st('label')}>${S.L.grade}</div>` + q.grade.map((e,i) => {
+            const [sc, why] = splitDash(e.text);
+            return `<div>${who(e,i)}<b>${fmt(sc)}</b>${why ? ' — ' + muted(why) : ''}</div>`;
+          }).join('') + `</div>`;
+        }
+      }
+      if (q.comment.length){
+        h += `<div${st('row','comment')}><div${st('label')}>${S.L.comment}</div>${q.comment.map(md).join('<br>')}</div>`;
+      }
+      h += `</div>`;
+    }
+    h += `</div>`;
+  }
+
+  // 결과
+  if (d.scores.length || d.word.length){
+    h += `<div${st('result')}><div${st('h3')}>${S.L.result}</div>`;
+    h += d.scores.map((s,i) => {
+      const num = /^-?\d+(\.\d+)?$/.test(s.pts);
+      return `<div${st('scoreBox')}>${s.name ? `<span${st('scoreName')}>${S.L === THEMES.kid.L ? S.bullet(idxOf(s.name,i)) + ' ' : ''}${esc(s.name)}</span>` : ''}<span${st('scorePts')}>${esc(s.pts)}${num ? `<span${st('scoreSmall')}> / 100</span>` : ''}</span></div>`;
+    }).join('');
+    if (d.word.length){
+      h += `<div${st('word')}><span${st('wordLabel')}>FROM. ${esc(d.examiner || '출제자')}</span>${d.word.map(md).join('<br>')}</div>`;
+    }
+    h += `</div>`;
+  }
+
+  h += scene(S.L.post, d.post);
+  h += `<div${st('foot')}>— 이 문제지에 관한 저작권은 ${esc(d.examiner || '출제자')}에게 있습니다 —</div>`;
+  h += `</div>`;
+  return h;
+}
+
+function check(d){
+  const w = [];
+  if (!d.title && !d.mc.length && !d.es.length) w.push('시험지 형식을 찾지 못했어요. QR 결과 로그 전체를 붙여넣었는지 확인해 주세요.');
+  else {
+    if (!d.mc.length) w.push('객관식 문제를 찾지 못했어요. (예: **Q1.** 형식)');
+    if (!d.scores.length) w.push('총점 줄(🏆)을 찾지 못했어요.');
+  }
+  return w.join('\n');
+}
+
+/* =========================================================
+   4. UI
+   ========================================================= */
+if (typeof document !== 'undefined'){
+  const $ = id => document.getElementById(id);
+  const input = $('input'), preview = $('preview'), warn = $('warn');
+  let theme = 'sepia', lastHtml = '';
+
+  const store = {
+    get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+    set(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+  };
+
+  function update(){
+    const raw = input.value;
+    if (!raw.trim()){ preview.innerHTML = '<p style="color:#999;text-align:center;padding:40px 0;margin:0">왼쪽에 로그를 붙여넣으면 여기에 미리보기가 나와요.</p>'; warn.textContent=''; lastHtml=''; return; }
+    const d = parseLog(raw);
+    lastHtml = render(d, theme);
+    preview.innerHTML = lastHtml;
+    warn.textContent = check(d);
+    store.set('exam_input', raw);
+  }
+  function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1600); }
+
+  document.querySelectorAll('#themes button').forEach(b => b.addEventListener('click', () => {
+    theme = b.dataset.theme;
+    document.querySelectorAll('#themes button').forEach(x => x.classList.toggle('on', x === b));
+    store.set('exam_theme', theme);
+    update();
+  }));
+
+  input.addEventListener('input', update);
+  $('clear').onclick = () => { input.value = ''; store.set('exam_input',''); update(); };
+
+  $('copyHtml').onclick = async () => {
+    if (!lastHtml) return toast('먼저 로그를 붙여넣어 주세요');
+    try { await navigator.clipboard.writeText(lastHtml); toast('HTML 코드를 복사했어요'); }
+    catch(e){ const ta = document.createElement('textarea'); ta.value = lastHtml; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('HTML 코드를 복사했어요'); }
+  };
+  $('copyRich').onclick = async () => {
+    if (!lastHtml) return toast('먼저 로그를 붙여넣어 주세요');
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([lastHtml], {type:'text/html'}),
+        'text/plain': new Blob([preview.innerText], {type:'text/plain'})
+      })]);
+      toast('서식째로 복사했어요');
+    } catch(e){
+      const r = document.createRange(); r.selectNodeContents(preview);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.execCommand('copy'); s.removeAllRanges();
+      toast('서식째로 복사했어요');
+    }
+  };
+  $('download').onclick = () => {
+    if (!lastHtml) return toast('먼저 로그를 붙여넣어 주세요');
+    const doc = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>모의고사</title></head><body style="margin:0;padding:24px 12px;background:#fff">${lastHtml}</body></html>`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([doc], {type:'text/html'}));
+    a.download = 'mock-exam.html'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+
+  /* ---------- 인식 단어 설정 ---------- */
+  const RULE_FIELDS = [
+    ['머리말'],
+    ['examiner',   '출제자 줄',            '시험관: ○○'],
+    ['examinee',   '응시자 줄',            '응시자: △△'],
+    ['hostSuffix', '제목 속 이름 뒤에 붙는 말', '[○○ 주최 : 주제]'],
+    ['문제'],
+    ['question',   '문제 번호 앞',          'Q1. / 문제 1.'],
+    ['submit',     '제출 줄',              '👉 제출: ①'],
+    ['grade',      '채점 줄',              '✒️ 채점: ✘ 정답: ③'],
+    ['answer',     '정답 표시',            '정답: ③'],
+    ['comment',    '코멘트 줄',            '🗣️ 평가: …'],
+    ['correct',    '맞음 기호',            '⭕'],
+    ['wrong',      '틀림 기호',            '✘'],
+    ['결과'],
+    ['total',      '총점 줄',              '🏆 총점: 58 / 100'],
+    ['word',       '한마디 줄',            '💬 ○○의 한마디'],
+    ['구역 제목 (### 줄)'],
+    ['sec:mc',     '객관식',               '#### 📝 객관식'],
+    ['sec:es',     '서술형',               '#### 📝 서술형'],
+    ['sec:head',   '시험지 제목',           '### 📜 [… 모의고사]'],
+    ['sec:result', '결과',                 '### 💯 시험 결과'],
+    ['sec:pre',    '시험 전 장면',          '### 🎬 시험 전'],
+    ['sec:post',   '시험 후 장면',          '### 🎬 시험 후'],
+    ['headingEmojis', '# 없이도 제목으로 볼 시작 이모지', '📝 객관식 …'],
+  ];
+  const getList = k => k.startsWith('sec:') ? RULES.sections.find(x => x[0] === k.slice(4))[1] : RULES[k];
+  const setList = (k, arr) => { const l = getList(k); l.splice(0, l.length, ...arr); };
+  const snapshot = () => Object.fromEntries(RULE_FIELDS.filter(f => f.length > 1).map(([k]) => [k, [...getList(k)]]));
+  const DEFAULT_RULES = snapshot();
+  const applyRules = obj => { for (const [k, v] of Object.entries(obj || {})) if (k in DEFAULT_RULES && Array.isArray(v)) setList(k, v.map(String).filter(Boolean)); };
+  const saveRules = () => store.set('exam_rules', JSON.stringify(snapshot()));
+  try { applyRules(JSON.parse(store.get('exam_rules') || '{}')); } catch(e){}
+
+  function buildRulesForm(){
+    const box = $('rulesForm'); box.innerHTML = '';
+    for (const f of RULE_FIELDS){
+      if (f.length === 1){ const g = document.createElement('div'); g.className = 'rule-group'; g.textContent = f[0]; box.appendChild(g); continue; }
+      const [k, label, ex] = f;
+      const item = document.createElement('div'); item.className = 'rule-item';
+      item.innerHTML = `<label><b></b><span></span></label><input type="text" spellcheck="false">`;
+      item.querySelector('b').textContent = label;
+      item.querySelector('span').textContent = '예) ' + ex;
+      const inp = item.querySelector('input');
+      inp.value = getList(k).join(', ');
+      const mark = () => inp.classList.toggle('changed', getList(k).join('|') !== DEFAULT_RULES[k].join('|'));
+      mark();
+      inp.addEventListener('input', () => {
+        const arr = inp.value.split(/[,，]/).map(x => x.trim()).filter(Boolean);
+        if (!arr.length) return;          // 비우면 적용하지 않음 (실수 방지)
+        setList(k, arr); saveRules(); mark(); update();
+      });
+      box.appendChild(item);
+    }
+  }
+  buildRulesForm();
+
+  $('rulesReset').onclick = () => {
+    if (!confirm('인식 단어를 모두 기본값으로 되돌릴까요?')) return;
+    applyRules(DEFAULT_RULES); store.set('exam_rules', ''); buildRulesForm(); update(); toast('기본값으로 되돌렸어요');
+  };
+  $('rulesExport').onclick = async () => {
+    const changed = Object.fromEntries(Object.entries(snapshot()).filter(([k, v]) => v.join('|') !== DEFAULT_RULES[k].join('|')));
+    const text = JSON.stringify(changed);
+    if (text === '{}') return toast('기본값에서 바꾼 게 없어요');
+    try { await navigator.clipboard.writeText(text); } catch(e){ prompt('아래 내용을 복사하세요', text); return; }
+    toast('바꾼 설정을 복사했어요');
+  };
+  $('rulesImport').onclick = () => {
+    const text = prompt('공유받은 설정을 붙여넣으세요');
+    if (!text) return;
+    try { applyRules(JSON.parse(text)); saveRules(); buildRulesForm(); update(); toast('설정을 불러왔어요'); }
+    catch(e){ toast('형식이 올바르지 않아요'); }
+  };
+
+  const savedTheme = store.get('exam_theme');
+  if (savedTheme && THEMES[savedTheme]){
+    theme = savedTheme;
+    document.querySelectorAll('#themes button').forEach(x => x.classList.toggle('on', x.dataset.theme === theme));
+  }
+  input.value = store.get('exam_input') || '';
+  update();
+}
+</script>
+</body>
+</html>
